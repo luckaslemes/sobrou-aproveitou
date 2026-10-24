@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Search, MapPin, Heart, Clock3, Store, ChevronRight, Leaf, Menu, Tag, Sparkles } from 'lucide-react';
 
 const offers = [
