@@ -6,9 +6,21 @@
     <meta name="theme-color" content="#146c43" />
     <meta name="description" content="Encontre ofertas locais e aproveite melhor em Londrina e região." />
     <title>Sobrou, Aproveitou! — Ofertas locais</title>
+    <style>
+      body { margin: 0; background: #fffdf8; color: #20352b; font-family: system-ui, sans-serif; }
+      #startup-fallback { max-width: 760px; margin: 48px auto; padding: 24px; }
+      #startup-fallback h1 { color: #176b45; }
+      @media (max-width: 800px) { #startup-fallback { margin: 20px auto; padding: 20px; } }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <main id="startup-fallback">
+        <h1>Sobrou, Aproveitou!</h1>
+        <p>Carregando o aplicativo…</p>
+        <p>Se esta mensagem não desaparecer, o navegador não executou o código do aplicativo. Confira se o servidor está rodando na pasta correta.</p>
+      </main>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
