@@ -1,5 +1,6 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+import './styles.css';
 
 const rootElement = document.getElementById('root');
 
@@ -19,8 +20,9 @@ if (!rootElement) {
   const root = createRoot(rootElement);
   root.render(<main style={{fontFamily:'system-ui,sans-serif',maxWidth:760,margin:'48px auto',padding:24,color:'#243126'}}><h1 style={{color:'#146c43'}}>Sobrou, Aproveitou!</h1><p>Iniciando o aplicativo…</p></main>);
   const isAdminRoute = window.location.pathname === '/admin' || window.location.pathname.startsWith('/admin/');
-  Promise.all([import('./styles.css'), isAdminRoute ? import('./admin/AdminApp.jsx') : import('./App.jsx')])
-    .then(([, module]) => {
+  const appImport = isAdminRoute ? import('./admin/AdminApp.jsx') : import('./App.jsx');
+  appImport
+    .then((module) => {
       const App = module.default;
       root.render(<React.StrictMode><AppErrorBoundary><App /></AppErrorBoundary></React.StrictMode>);
     })
