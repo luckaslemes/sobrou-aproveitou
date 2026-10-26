@@ -78,7 +78,7 @@ export default function App() {
 
   async function loadMerchantStore(session) {
     if (!supabase || !session?.user) return;
-    const { data: roleRow } = await supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle();
+    const { data: roleRow, error: roleError } = await supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle();
     const admin = roleRow?.role === 'admin'; setIsAdmin(admin);
     if (admin) { const [{ data: allOffers }, { data: allStores }] = await Promise.all([supabase.from('offers').select('*').order('created_at', { ascending: false }).limit(200), supabase.from('stores').select('*').order('created_at', { ascending: false }).limit(200)]); setAdminOffers(allOffers || []); setAdminStores(allStores || []); }
     const { data: coupons } = await supabase.from('merchant_coupons').select('id,code,description').eq('is_active', true).order('code');
@@ -91,6 +91,7 @@ export default function App() {
     setMerchantAddress(store?.address || meta.address || ''); setMerchantCoupon(store?.coupon_code || meta.coupon_code || '');
     const { data: mine } = await supabase.from('offers').select('*').eq('owner_id', session.user.id).order('created_at', { ascending: false }).limit(50);
     setMerchantOffers(mine || []);
+    return { admin, role: roleRow?.role ?? null, error: roleError?.message ?? null };
   }
 
   async function saveMerchantProfile(event) {
@@ -118,7 +119,7 @@ export default function App() {
     }
     if (result.error) setNotice((merchantMode === 'signup' ? 'Cadastro não concluído: ' : 'Falha no login: ') + result.error.message);
     else if (merchantMode === 'signup' && !result.data.session) setNotice('Cadastro iniciado! Abra o e-mail enviado pelo sistema e confirme seu endereço. Depois volte aqui e faça login para concluir o perfil da loja.');
-    else { setMerchantSession(result.data.session); await loadMerchantStore(result.data.session); setMerchantMode('dashboard'); setNotice(merchantMode === 'signup' ? 'Conta criada com sucesso! Confira e complete o perfil da sua loja.' : 'Login realizado com sucesso. Bem-vindo à área do lojista!'); }
+    else { setMerchantSession(result.data.session); const access = await loadMerchantStore(result.data.session); setMerchantMode('dashboard'); setNotice(access?.admin ? 'Acesso de administrador confirmado.' : access?.error ? 'Login realizado, mas não foi possível verificar seu perfil no banco: ' + access.error : access?.role ? 'Login realizado. Perfil reconhecido pelo banco: ' + access.role + '. Se esperava acesso admin, confirme se o perfil corresponde a esta conta.' : 'Login realizado, mas o perfil não foi encontrado na tabela profiles. Confira o usuário e as políticas RLS.'); }
     setMerchantBusy(false);
   }
 
