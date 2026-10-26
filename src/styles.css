@@ -73,3 +73,5 @@
 .offer-status.status-published{background:#e3f5e6;color:#267343}
 .offer-status.status-paused,.offer-status.status-expired{background:#f0f1ee;color:#737d74}
 @media(max-width:640px){.merchant-offer-row{align-items:flex-start;flex-direction:column}.merchant-modal{padding-bottom:calc(22px + env(safe-area-inset-bottom))!important}}
+
+.admin-offer-actions{display:flex;gap:6px;flex-wrap:wrap}.admin-offer-actions button{border:1px solid #dce5dc;background:#fff;border-radius:8px;padding:7px 10px;color:#176b45;font-size:12px;font-weight:700}.admin-offer-actions button:last-child{color:#a33a32}.merchant-modal{max-height:90vh;overflow-y:auto}.merchant-form input:focus,.merchant-form select:focus,.merchant-form textarea:focus{outline:2px solid #9acb9f;outline-offset:1px}.merchant-submit:disabled{opacity:.6;cursor:wait}
