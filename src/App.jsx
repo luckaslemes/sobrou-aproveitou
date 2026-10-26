@@ -55,6 +55,7 @@ export default function App() {
   const [merchantOffers, setMerchantOffers] = useState([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminOffers, setAdminOffers] = useState([]);
+  const [adminStores, setAdminStores] = useState([]);
   const [newCouponCode, setNewCouponCode] = useState('');
   const [newCouponDescription, setNewCouponDescription] = useState('');
   const [merchantSession, setMerchantSession] = useState(null);
@@ -79,7 +80,7 @@ export default function App() {
     if (!supabase || !session?.user) return;
     const { data: roleRow } = await supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle();
     const admin = roleRow?.role === 'admin'; setIsAdmin(admin);
-    if (admin) { const { data: allOffers } = await supabase.from('offers').select('*').order('created_at', { ascending: false }).limit(200); setAdminOffers(allOffers || []); }
+    if (admin) { const [{ data: allOffers }, { data: allStores }] = await Promise.all([supabase.from('offers').select('*').order('created_at', { ascending: false }).limit(200), supabase.from('stores').select('*').order('created_at', { ascending: false }).limit(200)]); setAdminOffers(allOffers || []); setAdminStores(allStores || []); }
     const { data: coupons } = await supabase.from('merchant_coupons').select('id,code,description').eq('is_active', true).order('code');
     setMerchantCoupons(coupons || []);
     const { data: stores } = await supabase.from('stores').select('*').eq('owner_id', session.user.id).order('created_at', { ascending: false }).limit(1);
@@ -101,7 +102,7 @@ export default function App() {
       ? await supabase.from('stores').update(values).eq('id', merchantStore.id).eq('owner_id', merchantSession.user.id).select().single()
       : await supabase.from('stores').insert(values).select().single();
     if (result.error) setNotice('Não foi possível salvar. Confira se a migração de lojistas foi executada e se o cupom está ativo. Detalhe: ' + result.error.message);
-    else { setMerchantStore(result.data); setNotice('Cadastro enviado com sucesso! Seu perfil ficará identificado como pendente, mas isso não impede a publicação das suas ofertas.'); await loadMerchantStore(merchantSession); }
+    else { setMerchantStore(result.data); setNotice('Cadastro enviado para análise. Você poderá publicar ofertas depois que a administração aprovar sua loja.'); await loadMerchantStore(merchantSession); }
     setMerchantBusy(false);
   }
 
@@ -133,6 +134,13 @@ export default function App() {
     setMerchantBusy(false);
   }
 
+  async function updateAdminStore(id, status) {
+    if (!supabase || !isAdmin) return;
+    const { error } = await supabase.from('stores').update({ status }).eq('id', id);
+    if (error) setNotice('Não foi possível atualizar o cadastro: ' + error.message);
+    else { setNotice(status === 'approved' ? 'Cadastro de lojista aprovado.' : status === 'rejected' ? 'Cadastro recusado.' : 'Cadastro atualizado.'); const { data } = await supabase.from('stores').select('*').order('created_at', { ascending: false }).limit(200); setAdminStores(data || []); await loadMerchantStore(merchantSession); }
+  }
+
   async function updateAdminOffer(id, status, is_active) {
     if (!supabase || !isAdmin) return;
     const { error } = await supabase.from('offers').update({ status, is_active }).eq('id', id);
@@ -143,7 +151,8 @@ export default function App() {
   async function submitOffer(event) {
     event.preventDefault();
     if (!supabase || !merchantSession) { setNotice('Entre na sua conta para publicar uma oferta.'); return; }
-    if (!merchantStore?.id) { setNotice('Salve primeiro o perfil da loja e selecione um cupom autorizado.'); return; }
+    if (!merchantStore?.id) { setNotice('Salve primeiro os dados da loja.'); return; }
+    if (!['approved', 'active'].includes(merchantStore.status)) { setNotice('Sua loja ainda está em análise. Você poderá publicar ofertas assim que a administração aprovar o cadastro.'); return; }
     if (offerForm.original_price && Number(offerForm.original_price) < Number(offerForm.price)) { setNotice('O preço normal precisa ser maior ou igual ao preço promocional.'); return; }
     setMerchantBusy(true); setNotice('');
     const payload = { title: offerForm.title.trim(), description: offerForm.description.trim(), category: offerForm.category, store_id: merchantStore.id, store_name: merchantName.trim() || merchantSession.user.user_metadata?.display_name || merchantEmail.split('@')[0], neighborhood: offerForm.neighborhood.trim() || 'Londrina', city: 'Londrina', original_price: offerForm.original_price ? Number(offerForm.original_price) : null, price: Number(offerForm.price), status: 'published', is_active: true, owner_id: merchantSession.user.id, expires_at: offerForm.expires_at || null };
@@ -240,7 +249,9 @@ export default function App() {
           {!isSupabaseConfigured ? <p>O Supabase não está configurado neste ambiente. Confira as variáveis VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY.</p> : merchantMode === 'dashboard' && merchantSession && isAdmin ? <>
             <p>Conectado como administrador: <strong>{merchantSession.user.email}</strong></p>
             <h3 className="merchant-section-title">Painel administrativo</h3>
-            <p>Gerencie cupons de cadastro e modere ofertas. A publicação dos lojistas não depende de aprovação prévia.</p>
+            <p>Analise os cadastros antes de liberar a publicação de ofertas. Você também pode gerenciar cupons e moderar anúncios.</p>
+            <h3 className="merchant-section-title">Cadastros de lojistas ({adminStores.length})</h3>
+            {adminStores.length ? <div className="merchant-offer-list">{adminStores.map(s => <div className="merchant-offer-row" key={s.id}><span><strong>{s.name || 'Loja sem nome'}</strong><small>{s.owner_name || 'Responsável não informado'} · {s.document_number || 'Documento não informado'} · {s.status || 'pending'}</small><small>{s.phone || ''} {s.address ? '· ' + s.address : ''}</small></span><span className="admin-offer-actions">{s.status !== 'approved' && s.status !== 'active' && <button type="button" onClick={() => updateAdminStore(s.id, 'approved')}>Aprovar</button>}{s.status !== 'rejected' && <button type="button" onClick={() => updateAdminStore(s.id, 'rejected')}>Recusar</button>}{(s.status === 'approved' || s.status === 'active') && <button type="button" onClick={() => updateAdminStore(s.id, 'blocked')}>Bloquear</button>}</span></div>)}</div> : <p>Nenhum cadastro de lojista encontrado.</p>}
             <form className="merchant-form" onSubmit={createAdminCoupon}>
               <label>Código do cupom autorizado<input required minLength={3} maxLength={40} value={newCouponCode} onChange={e => setNewCouponCode(e.target.value)} placeholder="Ex.: LOJISTA2026" /></label>
               <label>Descrição do cupom<input value={newCouponDescription} onChange={e => setNewCouponDescription(e.target.value)} placeholder="Descrição opcional" /></label>
@@ -251,7 +262,7 @@ export default function App() {
             <button className="merchant-secondary" onClick={signOutMerchant}><LogOut size={16} /> Sair da conta</button>
           </> : merchantMode === 'dashboard' && merchantSession ? <>
             <p>Conectado como <strong>{merchantSession.user.email}</strong>. Gerencie os dados e acompanhe a situação do seu comércio.</p>
-            <div className="merchant-status-card"><span className={'merchant-status-dot ' + (['approved','active'].includes(merchantStore?.status) ? 'is-approved' : '')}></span><div><strong>{['approved','active'].includes(merchantStore?.status) ? 'Loja aprovada' : merchantStore ? 'Cadastro em análise' : 'Complete o cadastro da loja'}</strong><small>{['approved','active'].includes(merchantStore?.status) ? 'Seu cadastro está aprovado.' : 'Você pode publicar ofertas sem aguardar aprovação administrativa.'}</small></div></div>
+            <div className="merchant-status-card"><span className={'merchant-status-dot ' + (['approved','active'].includes(merchantStore?.status) ? 'is-approved' : '')}></span><div><strong>{['approved','active'].includes(merchantStore?.status) ? 'Loja aprovada' : merchantStore ? 'Cadastro em análise' : 'Complete o cadastro da loja'}</strong><small>{['approved','active'].includes(merchantStore?.status) ? 'Seu cadastro está aprovado.' : 'A publicação de ofertas será liberada depois da aprovação administrativa.'}</small></div></div>
             <h3 className="merchant-section-title">Dados do responsável e da loja</h3>
             <form className="merchant-form" onSubmit={saveMerchantProfile}>
               <label>Nome completo do responsável<input required value={ownerName} onChange={e => setOwnerName(e.target.value)} placeholder="Nome do dono ou responsável" /></label>
@@ -264,7 +275,7 @@ export default function App() {
             </form>
             {merchantStore && <div className="merchant-review-note">Situação do cadastro: <strong>{merchantStore.status === 'approved' || merchantStore.status === 'active' ? 'Aprovado' : merchantStore.status === 'rejected' ? 'Precisa de ajustes' : merchantStore.status === 'blocked' ? 'Bloqueado' : 'Pendente de aprovação'}</strong></div>}
             <h3 className="merchant-section-title">Cadastrar uma oferta</h3>
-            {!merchantStore ? <div className="merchant-locked"><strong>Complete o perfil da loja</strong><p>Salve os dados da loja e o cupom autorizado. Depois você poderá publicar ofertas sem aprovação prévia.</p></div> : <form className="merchant-form" onSubmit={submitOffer}>
+            {!merchantStore ? <div className="merchant-locked"><strong>Complete o perfil da loja</strong><p>Salve os dados da loja e aguarde a análise da administração.</p></div> : !['approved', 'active'].includes(merchantStore.status) ? <div className="merchant-locked"><strong>Cadastro aguardando aprovação</strong><p>Por segurança, a publicação de ofertas só será liberada depois que a administração aprovar os dados da sua loja.</p></div> : <form className="merchant-form" onSubmit={submitOffer}>
               <label>Nome da oferta<input required value={offerForm.title} onChange={e => setOfferForm({ ...offerForm, title: e.target.value })} placeholder="Ex.: Kit de pães" /></label>
               <label>Descrição<textarea value={offerForm.description} onChange={e => setOfferForm({ ...offerForm, description: e.target.value })} placeholder="Descreva o produto" /></label>
               <label>Categoria<select value={offerForm.category} onChange={e => setOfferForm({ ...offerForm, category: e.target.value })}>{['Outros','Padaria','Hortifruti','Refeições','Doces','Cafeteria','Mercado'].map(x => <option key={x}>{x}</option>)}</select></label>
@@ -277,13 +288,13 @@ export default function App() {
             {merchantOffers.length ? <div className="merchant-offer-list">{merchantOffers.map(o => <div className="merchant-offer-row" key={o.id}><span><strong>{o.title}</strong><small>{money(Number(o.price) || 0)}</small></span><em className={'offer-status status-' + o.status}>{o.status === 'published' ? 'Publicada' : o.status === 'paused' ? 'Pausada' : o.status === 'expired' ? 'Expirada' : 'Em revisão'}</em></div>)}</div> : <p>Você ainda não publicou ofertas.</p>}
             <button className="merchant-secondary" onClick={signOutMerchant}><LogOut size={16} /> Sair da conta</button>
           </> : <>
-            <p>{merchantMode === 'login' ? 'Entre para gerenciar seu comércio e cadastrar ofertas.' : 'Crie sua conta para começar a enviar ofertas para revisão.'}</p>
+            <p>{merchantMode === 'login' ? 'Entre para gerenciar seu comércio e cadastrar ofertas.' : 'Crie sua conta e envie os dados da loja. A publicação será liberada após aprovação da administração.'}</p>
             
             <form className="merchant-form" onSubmit={submitMerchantAuth}>
               {merchantMode === 'signup' && <><label>Nome completo do responsável<input required value={ownerName} onChange={e => setOwnerName(e.target.value)} placeholder="Nome do dono ou responsável" /></label><label>Nome da loja<input required value={merchantName} onChange={e => setMerchantName(e.target.value)} placeholder="Nome comercial" /></label><label>CPF ou CNPJ<input required inputMode="numeric" minLength={11} maxLength={18} value={merchantDocument} onChange={e => setMerchantDocument(e.target.value)} placeholder="CPF ou CNPJ" /></label><label>Telefone / WhatsApp<input required type="tel" value={merchantPhone} onChange={e => setMerchantPhone(e.target.value)} placeholder="(43) 99999-9999" /></label><label>Endereço da loja<input required value={merchantAddress} onChange={e => setMerchantAddress(e.target.value)} placeholder="Rua, número e bairro" /></label></>}
               <label>E-mail<input required type="email" autoComplete="email" value={merchantEmail} onChange={e => setMerchantEmail(e.target.value)} placeholder="voce@loja.com.br" /></label>
               <label>Senha<input required type="password" minLength={6} autoComplete={merchantMode === 'login' ? 'current-password' : 'new-password'} value={merchantPassword} onChange={e => setMerchantPassword(e.target.value)} placeholder="Mínimo de 6 caracteres" /></label>
-              <button className="merchant-submit" disabled={merchantBusy || (merchantMode === 'signup' && merchantCoupons.length === 0)} type="submit"><LogIn size={17} /> {merchantBusy ? 'Aguarde...' : merchantMode === 'login' ? 'Entrar' : 'Criar conta'}</button>
+              <button className="merchant-submit" disabled={merchantBusy} type="submit"><LogIn size={17} /> {merchantBusy ? 'Aguarde...' : merchantMode === 'login' ? 'Entrar' : 'Criar conta'}</button>
             </form>
             <button className="merchant-secondary" onClick={() => setMerchantMode(merchantMode === 'login' ? 'signup' : 'login')}>{merchantMode === 'login' ? 'Ainda não tenho conta — cadastrar' : 'Já tenho conta — entrar'}</button>
           </>}
