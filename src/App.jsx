@@ -86,7 +86,7 @@ export default function App() {
       ? await supabase.from('stores').update(values).eq('id', merchantStore.id).eq('owner_id', merchantSession.user.id).select().single()
       : await supabase.from('stores').insert(values).select().single();
     if (result.error) setNotice('Não foi possível salvar. Confira se a migração de lojistas foi executada e se o cupom está ativo. Detalhe: ' + result.error.message);
-    else { setMerchantStore(result.data); setNotice('Cadastro enviado com sucesso! Sua loja ficará pendente até a aprovação da administração.'); await loadMerchantStore(merchantSession); }
+    else { setMerchantStore(result.data); setNotice('Cadastro enviado com sucesso! Seu perfil ficará identificado como pendente, mas isso não impede a publicação das suas ofertas.'); await loadMerchantStore(merchantSession); }
     setMerchantBusy(false);
   }
 
@@ -110,11 +110,10 @@ export default function App() {
     event.preventDefault();
     if (!supabase || !merchantSession) return;
     setMerchantBusy(true); setNotice('');
-    if (!merchantStore || !['approved','active'].includes(merchantStore.status)) { setNotice('Sua loja precisa ser aprovada pela administração antes de enviar ofertas.'); return; }
-    const payload = { title: offerForm.title.trim(), description: offerForm.description.trim(), category: offerForm.category, store_id: merchantStore.id, store_name: merchantName.trim() || merchantSession.user.user_metadata?.display_name || merchantEmail.split('@')[0], neighborhood: offerForm.neighborhood.trim() || 'Londrina', city: 'Londrina', original_price: offerForm.original_price ? Number(offerForm.original_price) : null, price: Number(offerForm.price), status: 'draft', is_active: true, owner_id: merchantSession.user.id, expires_at: offerForm.expires_at || null };
+    const payload = { title: offerForm.title.trim(), description: offerForm.description.trim(), category: offerForm.category, store_id: merchantStore.id, store_name: merchantName.trim() || merchantSession.user.user_metadata?.display_name || merchantEmail.split('@')[0], neighborhood: offerForm.neighborhood.trim() || 'Londrina', city: 'Londrina', original_price: offerForm.original_price ? Number(offerForm.original_price) : null, price: Number(offerForm.price), status: 'published', is_active: true, owner_id: merchantSession.user.id, expires_at: offerForm.expires_at || null };
     const { error } = await supabase.from('offers').insert(payload);
     if (error) setNotice('Oferta não salva: ' + error.message + '. Confira se executou a migração de permissões para lojistas.');
-    else { setNotice('Oferta enviada para revisão. Ela aparecerá na página inicial depois de publicada.'); setOfferForm({ title: '', description: '', category: 'Outros', original_price: '', price: '', neighborhood: 'Centro', expires_at: '' }); await loadOffers(); }
+    else { setNotice('Oferta publicada com sucesso! Ela já pode aparecer na página inicial.'); await loadMerchantStore(merchantSession); setOfferForm({ title: '', description: '', category: 'Outros', original_price: '', price: '', neighborhood: 'Centro', expires_at: '' }); await loadOffers(); }
     setMerchantBusy(false);
   }
 
@@ -204,7 +203,7 @@ export default function App() {
           {notice && <div className="merchant-notice" role="status">{notice}</div>}
           {!isSupabaseConfigured ? <p>O Supabase não está configurado neste ambiente. Confira as variáveis VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY.</p> : merchantMode === 'dashboard' && merchantSession ? <>
             <p>Conectado como <strong>{merchantSession.user.email}</strong>. Gerencie os dados e acompanhe a situação do seu comércio.</p>
-            <div className="merchant-status-card"><span className={'merchant-status-dot ' + (['approved','active'].includes(merchantStore?.status) ? 'is-approved' : '')}></span><div><strong>{['approved','active'].includes(merchantStore?.status) ? 'Loja aprovada' : merchantStore ? 'Cadastro em análise' : 'Complete o cadastro da loja'}</strong><small>{['approved','active'].includes(merchantStore?.status) ? 'Você já pode cadastrar ofertas.' : 'A administração precisa aprovar os dados antes da publicação.'}</small></div></div>
+            <div className="merchant-status-card"><span className={'merchant-status-dot ' + (['approved','active'].includes(merchantStore?.status) ? 'is-approved' : '')}></span><div><strong>{['approved','active'].includes(merchantStore?.status) ? 'Loja aprovada' : merchantStore ? 'Cadastro em análise' : 'Complete o cadastro da loja'}</strong><small>{['approved','active'].includes(merchantStore?.status) ? 'Seu cadastro está aprovado.' : 'Você pode publicar ofertas sem aguardar aprovação administrativa.'}</small></div></div>
             <h3 className="merchant-section-title">Dados do responsável e da loja</h3>
             <form className="merchant-form" onSubmit={saveMerchantProfile}>
               <label>Nome completo do responsável<input required value={ownerName} onChange={e => setOwnerName(e.target.value)} placeholder="Nome do dono ou responsável" /></label>
@@ -217,17 +216,17 @@ export default function App() {
             </form>
             {merchantStore && <div className="merchant-review-note">Situação do cadastro: <strong>{merchantStore.status === 'approved' || merchantStore.status === 'active' ? 'Aprovado' : merchantStore.status === 'rejected' ? 'Precisa de ajustes' : merchantStore.status === 'blocked' ? 'Bloqueado' : 'Pendente de aprovação'}</strong></div>}
             <h3 className="merchant-section-title">Cadastrar uma oferta</h3>
-            {(!merchantStore || !['approved','active'].includes(merchantStore.status)) ? <div className="merchant-locked"><strong>🔒 Cadastro de ofertas bloqueado</strong><p>Assim que a administração aprovar sua loja, você poderá cadastrar ofertas por aqui.</p></div> : <form className="merchant-form" onSubmit={submitOffer}>
+            {(!merchantStore || !['approved','active'].includes(merchantStore.status)) ? <div className="merchant-locked"><strong>Cadastro de ofertas</strong><p>Você pode publicar suas ofertas diretamente, sem precisar de aprovação administrativa.</p></div> : <form className="merchant-form" onSubmit={submitOffer}>
               <label>Nome da oferta<input required value={offerForm.title} onChange={e => setOfferForm({ ...offerForm, title: e.target.value })} placeholder="Ex.: Kit de pães" /></label>
               <label>Descrição<textarea value={offerForm.description} onChange={e => setOfferForm({ ...offerForm, description: e.target.value })} placeholder="Descreva o produto" /></label>
               <label>Categoria<select value={offerForm.category} onChange={e => setOfferForm({ ...offerForm, category: e.target.value })}>{['Outros','Padaria','Hortifruti','Refeições','Doces','Cafeteria','Mercado'].map(x => <option key={x}>{x}</option>)}</select></label>
               <div className="merchant-form-row"><label>Preço normal (R$)<input type="number" min="0" step="0.01" value={offerForm.original_price} onChange={e => setOfferForm({ ...offerForm, original_price: e.target.value })} /></label><label>Preço oferta (R$)<input required type="number" min="0.01" step="0.01" value={offerForm.price} onChange={e => setOfferForm({ ...offerForm, price: e.target.value })} /></label></div>
               <label>Bairro<input value={offerForm.neighborhood} onChange={e => setOfferForm({ ...offerForm, neighborhood: e.target.value })} /></label>
               <label>Validade (opcional)<input type="datetime-local" value={offerForm.expires_at} onChange={e => setOfferForm({ ...offerForm, expires_at: e.target.value ? new Date(e.target.value).toISOString() : '' })} /></label>
-              <button className="merchant-submit" disabled={merchantBusy} type="submit"><PlusCircle size={17} /> {merchantBusy ? 'Salvando...' : 'Enviar oferta para revisão'}</button>
+              <button className="merchant-submit" disabled={merchantBusy} type="submit"><PlusCircle size={17} /> {merchantBusy ? 'Salvando...' : 'Publicar oferta agora'}</button>
             </form>}
             <h3 className="merchant-section-title">Minhas ofertas</h3>
-            {merchantOffers.length ? <div className="merchant-offer-list">{merchantOffers.map(o => <div className="merchant-offer-row" key={o.id}><span><strong>{o.title}</strong><small>{money(Number(o.price) || 0)}</small></span><em className={'offer-status status-' + o.status}>{o.status === 'published' ? 'Publicada' : o.status === 'paused' ? 'Pausada' : o.status === 'expired' ? 'Expirada' : 'Em revisão'}</em></div>)}</div> : <p>Você ainda não enviou ofertas.</p>}
+            {merchantOffers.length ? <div className="merchant-offer-list">{merchantOffers.map(o => <div className="merchant-offer-row" key={o.id}><span><strong>{o.title}</strong><small>{money(Number(o.price) || 0)}</small></span><em className={'offer-status status-' + o.status}>{o.status === 'published' ? 'Publicada' : o.status === 'paused' ? 'Pausada' : o.status === 'expired' ? 'Expirada' : 'Em revisão'}</em></div>)}</div> : <p>Você ainda não publicou ofertas.</p>}
             <button className="merchant-secondary" onClick={signOutMerchant}><LogOut size={16} /> Sair da conta</button>
           </> : <>
             <p>{merchantMode === 'login' ? 'Entre para gerenciar seu comércio e cadastrar ofertas.' : 'Crie sua conta para começar a enviar ofertas para revisão.'}</p>
