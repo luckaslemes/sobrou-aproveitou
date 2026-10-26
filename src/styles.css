@@ -49,3 +49,27 @@
 .empty-state button{border:0;border-radius:12px;background:#176b45;color:white;padding:12px 16px;font-weight:700}
 @media(max-width:640px){.merchant-modal-backdrop{align-items:flex-end!important;padding:8px!important}.merchant-modal{width:100%!important;max-height:calc(100dvh - 16px)!important;border-radius:25px 25px 18px 18px!important;padding:25px 19px!important}.merchant-form{grid-template-columns:1fr!important;gap:13px!important}.merchant-form>label,.merchant-form>.merchant-form-row,.merchant-form>.merchant-submit{grid-column:1!important}.merchant-form-row{grid-template-columns:1fr 1fr!important;gap:10px!important}.merchant-form input,.merchant-form textarea,.merchant-form select{font-size:16px!important}.hero{padding:32px 24px!important;min-height:330px!important}.hero-art{opacity:.22!important;width:55%!important}.hero-content{max-width:100%!important}.topbar{padding:0 5%!important}.location{display:none!important}main{padding:0 5%!important}.merchant-banner{flex-wrap:wrap!important}}
 @media(max-width:380px){.merchant-form-row{grid-template-columns:1fr!important}.merchant-modal{padding:22px 15px!important}}
+
+
+/* Merchant dashboard clarity and status feedback */
+.merchant-notice{margin:0 0 18px;padding:13px 15px;border-radius:13px;background:#eaf6e9;border:1px solid #d0e8ce;color:#245f39;font-size:13px;line-height:1.55;overflow-wrap:anywhere}
+.merchant-status-card{display:flex;align-items:flex-start;gap:12px;background:#f0f6eb;border:1px solid #dcebd4;border-radius:15px;padding:15px;margin:0 0 22px}
+.merchant-status-card>div{display:flex;flex-direction:column;gap:5px}
+.merchant-status-card strong{font-size:13px;color:#245b39}
+.merchant-status-card small{font-size:12px;line-height:1.5;color:#718075}
+.merchant-status-dot{width:10px;height:10px;border-radius:50%;background:#e4a83b;margin-top:4px;flex-shrink:0}
+.merchant-status-dot.is-approved{background:#2a9c58;box-shadow:0 0 0 4px #2a9c581c}
+.merchant-section-title{font:800 16px Manrope,sans-serif;color:#193d2c;margin:25px 0 14px;padding-top:20px;border-top:1px solid #e5ecdf}
+.merchant-review-note{margin-top:12px;border-radius:12px;background:#f7f8f3;padding:12px;font-size:12px;color:#657468}
+.merchant-locked{padding:15px;border:1px solid #f0dfbd;background:#fff8e9;border-radius:14px;margin:0 0 16px;color:#795b20}
+.merchant-locked strong{font-size:13px}
+.merchant-locked p{margin:7px 0 0;font-size:12px;line-height:1.5}
+.merchant-offer-list{display:flex;flex-direction:column;gap:8px}
+.merchant-offer-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px;border:1px solid #e5ecdf;border-radius:12px;background:#fff}
+.merchant-offer-row>span{display:flex;flex-direction:column;gap:5px;min-width:0}
+.merchant-offer-row strong{font-size:12px;overflow-wrap:anywhere}
+.merchant-offer-row small{font-size:11px;color:#6c7c70}
+.offer-status{font-size:10px;font-style:normal;font-weight:800;padding:6px 8px;border-radius:20px;background:#fff1d9;color:#8a601e;white-space:nowrap}
+.offer-status.status-published{background:#e3f5e6;color:#267343}
+.offer-status.status-paused,.offer-status.status-expired{background:#f0f1ee;color:#737d74}
+@media(max-width:640px){.merchant-offer-row{align-items:flex-start;flex-direction:column}.merchant-modal{padding-bottom:calc(22px + env(safe-area-inset-bottom))!important}}
