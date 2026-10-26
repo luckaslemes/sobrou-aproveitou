@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Search, MapPin, Heart, Clock3, Store, ChevronRight, Leaf, Menu, Sparkles, RefreshCw } from 'lucide-react';
+import { Search, MapPin, Heart, Clock3, Store, ChevronRight, Leaf, Menu, Sparkles, RefreshCw, X, LogIn, PlusCircle, LogOut } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 
 const offers = [];
@@ -39,6 +39,50 @@ export default function App() {
   const [offers, setOffers] = useState([]);
   const [loadingOffers, setLoadingOffers] = useState(true);
   const [offersError, setOffersError] = useState('');
+  const [merchantOpen, setMerchantOpen] = useState(false);
+  const [merchantMode, setMerchantMode] = useState('signup');
+  const [merchantBusy, setMerchantBusy] = useState(false);
+  const [merchantEmail, setMerchantEmail] = useState('');
+  const [merchantPassword, setMerchantPassword] = useState('');
+  const [merchantName, setMerchantName] = useState('');
+  const [merchantSession, setMerchantSession] = useState(null);
+  const [offerForm, setOfferForm] = useState({ title: '', description: '', category: 'Outros', original_price: '', price: '', neighborhood: 'Centro', expires_at: '' });
+
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.auth.getSession().then(({ data }) => setMerchantSession(data.session));
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => setMerchantSession(session));
+    return () => data.subscription.unsubscribe();
+  }, []);
+
+  async function submitMerchantAuth(event) {
+    event.preventDefault();
+    if (!supabase) { setNotice('Conexão com Supabase não configurada.'); return; }
+    setMerchantBusy(true); setNotice('');
+    let result;
+    if (merchantMode === 'signup') {
+      result = await supabase.auth.signUp({ email: merchantEmail.trim(), password: merchantPassword, options: { data: { display_name: merchantName.trim(), role: 'merchant' }, emailRedirectTo: window.location.origin } });
+    } else {
+      result = await supabase.auth.signInWithPassword({ email: merchantEmail.trim(), password: merchantPassword });
+    }
+    if (result.error) setNotice('Não foi possível concluir: ' + result.error.message);
+    else if (merchantMode === 'signup' && !result.data.session) setNotice('Conta criada. Confira seu e-mail para confirmar o cadastro e depois entre no app.');
+    else { setMerchantSession(result.data.session); setMerchantMode('dashboard'); setNotice('Acesso realizado.'); }
+    setMerchantBusy(false);
+  }
+
+  async function submitOffer(event) {
+    event.preventDefault();
+    if (!supabase || !merchantSession) return;
+    setMerchantBusy(true); setNotice('');
+    const payload = { title: offerForm.title.trim(), description: offerForm.description.trim(), category: offerForm.category, store_name: merchantName.trim() || merchantSession.user.user_metadata?.display_name || merchantEmail.split('@')[0], neighborhood: offerForm.neighborhood.trim() || 'Londrina', city: 'Londrina', original_price: offerForm.original_price ? Number(offerForm.original_price) : null, price: Number(offerForm.price), status: 'draft', is_active: true, owner_id: merchantSession.user.id, expires_at: offerForm.expires_at || null };
+    const { error } = await supabase.from('offers').insert(payload);
+    if (error) setNotice('Oferta não salva: ' + error.message + '. Confira se executou a migração de permissões para lojistas.');
+    else { setNotice('Oferta enviada para revisão. Ela aparecerá na página inicial depois de publicada.'); setOfferForm({ title: '', description: '', category: 'Outros', original_price: '', price: '', neighborhood: 'Centro', expires_at: '' }); await loadOffers(); }
+    setMerchantBusy(false);
+  }
+
+  async function signOutMerchant() { await supabase?.auth.signOut(); setMerchantSession(null); setMerchantMode('signup'); }
 
   async function loadOffers() {
     setLoadingOffers(true);
@@ -84,7 +128,7 @@ export default function App() {
           <span className="brand-copy"><strong>sobrou<span>,</span></strong><b>aproveitou!</b></span>
         </a>
         <div className="location"><MapPin size={17} /><span><small>Você está vendo ofertas em</small><strong>Londrina, PR</strong></span><ChevronRight size={16} /></div>
-        <button className="merchant-link" onClick={() => setNotice('O cadastro de comerciantes será habilitado após configurar o fluxo de contas e publicação de ofertas.')}><Store size={17} /> Sou lojista</button>
+        <button className="merchant-link" onClick={() => { setMerchantOpen(true); setMerchantMode(merchantSession ? 'dashboard' : 'signup'); }}><Store size={17} /> Sou lojista</button>
         <button className="mobile-menu" aria-label="Menu" onClick={() => setNotice('Menu em construção.')}><Menu /></button>
       </header>
 
@@ -113,9 +157,38 @@ export default function App() {
           {loadingOffers ? <div className="empty-state"><span>⏳</span><h3>Carregando ofertas...</h3><p>Buscando ofertas publicadas pelos comércios.</p></div> : offersError ? <div className="empty-state"><span>⚠️</span><h3>Não foi possível carregar as ofertas</h3><p>{offersError}</p><button onClick={loadOffers}><RefreshCw size={15} /> Tentar novamente</button></div> : visibleOffers.length ? <div className="offer-grid">{visibleOffers.map(offer => <article className="offer-card" key={offer.id}><div className={'offer-visual ' + offer.color}>{offer.image ? <img src={offer.image} alt={offer.title} style={{width:'100%',height:'100%',objectFit:'cover'}} /> : <span className="food-emoji">{offer.emoji}</span>}{offer.discount > 0 && <span className="discount-badge">-{offer.discount}%</span>}<button className={favorites.includes(offer.id) ? 'heart-button saved' : 'heart-button'} onClick={() => toggleFavorite(offer.id)} aria-label={favorites.includes(offer.id) ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}><Heart size={18} fill={favorites.includes(offer.id) ? 'currentColor' : 'none'} /></button><span className="visual-caption">RESGATE LOCAL</span></div><div className="offer-info"><div className="store-name"><Store size={13} /> {offer.shop}</div><h3>{offer.title}</h3><p className="offer-description">{offer.description}</p><div className="offer-meta"><span><MapPin size={13} /> {offer.area}</span><span><Clock3 size={13} /> {offer.time}</span></div><div className="price-row"><div>{offer.oldPrice > offer.price && <del>{money(offer.oldPrice)}</del>}<strong>{money(offer.price)}</strong></div><button className="details-button" onClick={() => setNotice('Consulte o comércio responsável para confirmar disponibilidade e resgate desta oferta.')}>Ver oferta <ChevronRight size={16} /></button></div></div></article>)}</div> : <div className="empty-state"><span>♻️</span><h3>{showFavorites ? 'Você ainda não favoritou nenhuma oferta' : 'Ainda não há ofertas publicadas'}</h3><p>{showFavorites ? 'Toque no coração de uma oferta para salvá-la aqui.' : 'Quando os comércios publicarem ofertas reais, elas aparecerão aqui.'}</p>{showFavorites && <button onClick={() => setShowFavorites(false)}>Ver todas as ofertas</button>}</div>}
         </section>
 
-        <section className="merchant-banner"><div className="merchant-illustration">🏪</div><div><span>VOCÊ TEM UM NEGÓCIO LOCAL?</span><h2>O que sobrou pode virar oportunidade.</h2><p>Encontre novos clientes, reduza perdas e dê uma nova chance aos seus produtos.</p></div><button onClick={() => setNotice('Em breve: cadastro de lojistas com perfil da loja e publicação de ofertas.')}>Quero anunciar <ChevronRight size={17} /></button></section>
+        <section className="merchant-banner"><div className="merchant-illustration">🏪</div><div><span>VOCÊ TEM UM NEGÓCIO LOCAL?</span><h2>O que sobrou pode virar oportunidade.</h2><p>Encontre novos clientes, reduza perdas e dê uma nova chance aos seus produtos.</p></div><button onClick={() => { setMerchantOpen(true); setMerchantMode(merchantSession ? 'dashboard' : 'signup'); }}>Quero anunciar <ChevronRight size={17} /></button></section>
       </main>
 
+      {merchantOpen && <div className="merchant-modal-backdrop" role="presentation" onClick={event => { if (event.target === event.currentTarget) setMerchantOpen(false); }}>
+        <section className="merchant-modal" role="dialog" aria-modal="true" aria-labelledby="merchant-modal-title">
+          <button className="merchant-modal-close" onClick={() => setMerchantOpen(false)} aria-label="Fechar"><X size={20} /></button>
+          <div className="merchant-modal-brand"><Store size={22} /></div>
+          <h2 id="merchant-modal-title">{merchantMode === 'dashboard' ? 'Área do lojista' : merchantMode === 'login' ? 'Entrar como lojista' : 'Cadastre seu comércio'}</h2>
+          {!isSupabaseConfigured ? <p>O Supabase não está configurado neste ambiente. Confira as variáveis VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY.</p> : merchantMode === 'dashboard' && merchantSession ? <>
+            <p>Conectado como {merchantSession.user.email}. Cadastre uma oferta; ela ficará como rascunho até ser publicada pelo administrador.</p>
+            <form className="merchant-form" onSubmit={submitOffer}>
+              <label>Nome do comércio<input value={merchantName} onChange={e => setMerchantName(e.target.value)} placeholder="Nome da sua loja" /></label>
+              <label>Nome da oferta<input required value={offerForm.title} onChange={e => setOfferForm({ ...offerForm, title: e.target.value })} placeholder="Ex.: Kit de pães" /></label>
+              <label>Descrição<textarea value={offerForm.description} onChange={e => setOfferForm({ ...offerForm, description: e.target.value })} placeholder="Descreva o produto" /></label>
+              <label>Categoria<select value={offerForm.category} onChange={e => setOfferForm({ ...offerForm, category: e.target.value })}>{['Outros','Padaria','Hortifruti','Refeições','Doces','Cafeteria','Mercado'].map(x => <option key={x}>{x}</option>)}</select></label>
+              <div className="merchant-form-row"><label>Preço normal (R$)<input type="number" min="0" step="0.01" value={offerForm.original_price} onChange={e => setOfferForm({ ...offerForm, original_price: e.target.value })} /></label><label>Preço oferta (R$)<input required type="number" min="0.01" step="0.01" value={offerForm.price} onChange={e => setOfferForm({ ...offerForm, price: e.target.value })} /></label></div>
+              <label>Bairro<input value={offerForm.neighborhood} onChange={e => setOfferForm({ ...offerForm, neighborhood: e.target.value })} /></label>
+              <label>Validade (opcional)<input type="datetime-local" value={offerForm.expires_at} onChange={e => setOfferForm({ ...offerForm, expires_at: e.target.value ? new Date(e.target.value).toISOString() : '' })} /></label>
+              <button className="merchant-submit" disabled={merchantBusy} type="submit"><PlusCircle size={17} /> {merchantBusy ? 'Salvando...' : 'Enviar oferta para revisão'}</button>
+            </form><button className="merchant-secondary" onClick={signOutMerchant}><LogOut size={16} /> Sair da conta</button>
+          </> : <>
+            <p>{merchantMode === 'login' ? 'Entre para gerenciar seu comércio e cadastrar ofertas.' : 'Crie sua conta para começar a enviar ofertas para revisão.'}</p>
+            <form className="merchant-form" onSubmit={submitMerchantAuth}>
+              {merchantMode === 'signup' && <label>Nome do comércio<input required value={merchantName} onChange={e => setMerchantName(e.target.value)} placeholder="Nome da loja" /></label>}
+              <label>E-mail<input required type="email" autoComplete="email" value={merchantEmail} onChange={e => setMerchantEmail(e.target.value)} placeholder="voce@loja.com.br" /></label>
+              <label>Senha<input required type="password" minLength={6} autoComplete={merchantMode === 'login' ? 'current-password' : 'new-password'} value={merchantPassword} onChange={e => setMerchantPassword(e.target.value)} placeholder="Mínimo de 6 caracteres" /></label>
+              <button className="merchant-submit" disabled={merchantBusy} type="submit"><LogIn size={17} /> {merchantBusy ? 'Aguarde...' : merchantMode === 'login' ? 'Entrar' : 'Criar conta'}</button>
+            </form>
+            <button className="merchant-secondary" onClick={() => setMerchantMode(merchantMode === 'login' ? 'signup' : 'login')}>{merchantMode === 'login' ? 'Ainda não tenho conta — cadastrar' : 'Já tenho conta — entrar'}</button>
+          </>}
+        </section>
+      </div>}
       <footer><a className="footer-brand" href="#"><span className="brand-mark"><Leaf size={19} /></span><strong>sobrou, aproveitou!</strong></a><p>Comprar bem. Desperdiçar menos. Fortalecer o comércio local.</p><div>Feito com 💚 em Londrina, PR</div><small>© 2026 Sobrou, Aproveitou! · Protótipo inicial</small></footer>
     </div>
   );
