@@ -56,8 +56,16 @@ export default function App() {
   const [merchantSession, setMerchantSession] = useState(null);
   const [offerForm, setOfferForm] = useState({ title: '', description: '', category: 'Outros', original_price: '', price: '', neighborhood: 'Centro', expires_at: '' });
 
+  async function loadAvailableCoupons() {
+    if (!supabase) return;
+    const { data, error } = await supabase.from('merchant_coupons').select('id,code,description').eq('is_active', true).order('code');
+    if (error) { setMerchantCoupons([]); setNotice('Não foi possível carregar os cupons autorizados. A administração precisa conferir as permissões do Supabase.'); return; }
+    setMerchantCoupons(data || []);
+  }
+
   useEffect(() => {
     if (!supabase) return;
+    loadAvailableCoupons();
     supabase.auth.getSession().then(async ({ data }) => { setMerchantSession(data.session); if (data.session) { await loadMerchantStore(data.session); setMerchantMode('dashboard'); } });
     const { data } = supabase.auth.onAuthStateChange(async (_event, session) => { setMerchantSession(session); if (session) { await loadMerchantStore(session); setMerchantMode('dashboard'); } else { setMerchantStore(null); setMerchantOffers([]); } });
     return () => data.subscription.unsubscribe();
@@ -100,15 +108,17 @@ export default function App() {
     } else {
       result = await supabase.auth.signInWithPassword({ email: merchantEmail.trim(), password: merchantPassword });
     }
-    if (result.error) setNotice('Não foi possível concluir: ' + result.error.message);
-    else if (merchantMode === 'signup' && !result.data.session) setNotice('Cadastro de acesso criado! Confirme o e-mail enviado e depois entre para concluir o cadastro da loja.');
-    else { setMerchantSession(result.data.session); await loadMerchantStore(result.data.session); setMerchantMode('dashboard'); setNotice(merchantMode === 'signup' ? 'Conta criada com sucesso! Confira os dados da sua loja.' : 'Login realizado com sucesso. Bem-vindo à área do lojista!'); }
+    if (result.error) setNotice((merchantMode === 'signup' ? 'Cadastro não concluído: ' : 'Falha no login: ') + result.error.message);
+    else if (merchantMode === 'signup' && !result.data.session) setNotice('Cadastro iniciado! Abra o e-mail enviado pelo sistema e confirme seu endereço. Depois volte aqui e faça login para concluir o perfil da loja.');
+    else { setMerchantSession(result.data.session); await loadMerchantStore(result.data.session); setMerchantMode('dashboard'); setNotice(merchantMode === 'signup' ? 'Conta criada com sucesso! Confira e complete o perfil da sua loja.' : 'Login realizado com sucesso. Bem-vindo à área do lojista!'); }
     setMerchantBusy(false);
   }
 
   async function submitOffer(event) {
     event.preventDefault();
-    if (!supabase || !merchantSession) return;
+    if (!supabase || !merchantSession) { setNotice('Entre na sua conta para publicar uma oferta.'); return; }
+    if (!merchantStore?.id) { setNotice('Salve primeiro o perfil da loja e selecione um cupom autorizado.'); return; }
+    if (offerForm.original_price && Number(offerForm.original_price) < Number(offerForm.price)) { setNotice('O preço normal precisa ser maior ou igual ao preço promocional.'); return; }
     setMerchantBusy(true); setNotice('');
     const payload = { title: offerForm.title.trim(), description: offerForm.description.trim(), category: offerForm.category, store_id: merchantStore.id, store_name: merchantName.trim() || merchantSession.user.user_metadata?.display_name || merchantEmail.split('@')[0], neighborhood: offerForm.neighborhood.trim() || 'Londrina', city: 'Londrina', original_price: offerForm.original_price ? Number(offerForm.original_price) : null, price: Number(offerForm.price), status: 'published', is_active: true, owner_id: merchantSession.user.id, expires_at: offerForm.expires_at || null };
     const { error } = await supabase.from('offers').insert(payload);
@@ -163,7 +173,7 @@ export default function App() {
           <span className="brand-copy"><strong>sobrou<span>,</span></strong><b>aproveitou!</b></span>
         </a>
         <div className="location"><MapPin size={17} /><span><small>Você está vendo ofertas em</small><strong>Londrina, PR</strong></span><ChevronRight size={16} /></div>
-        <button className="merchant-link" onClick={() => { setMerchantOpen(true); setMerchantMode(merchantSession ? 'dashboard' : 'signup'); }}><Store size={17} /> Sou lojista</button>
+        <button className="merchant-link" onClick={() => { setMerchantOpen(true); setMerchantMode(merchantSession ? 'dashboard' : 'signup'); loadAvailableCoupons(); }}><Store size={17} /> Sou lojista</button>
         <button className="mobile-menu" aria-label="Menu" onClick={() => setNotice('Menu em construção.')}><Menu /></button>
       </header>
 
@@ -192,7 +202,7 @@ export default function App() {
           {loadingOffers ? <div className="empty-state"><span>⏳</span><h3>Carregando ofertas...</h3><p>Buscando ofertas publicadas pelos comércios.</p></div> : offersError ? <div className="empty-state"><span>⚠️</span><h3>Não foi possível carregar as ofertas</h3><p>{offersError}</p><button onClick={loadOffers}><RefreshCw size={15} /> Tentar novamente</button></div> : visibleOffers.length ? <div className="offer-grid">{visibleOffers.map(offer => <article className="offer-card" key={offer.id}><div className={'offer-visual ' + offer.color}>{offer.image ? <img src={offer.image} alt={offer.title} style={{width:'100%',height:'100%',objectFit:'cover'}} /> : <span className="food-emoji">{offer.emoji}</span>}{offer.discount > 0 && <span className="discount-badge">-{offer.discount}%</span>}<button className={favorites.includes(offer.id) ? 'heart-button saved' : 'heart-button'} onClick={() => toggleFavorite(offer.id)} aria-label={favorites.includes(offer.id) ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}><Heart size={18} fill={favorites.includes(offer.id) ? 'currentColor' : 'none'} /></button><span className="visual-caption">RESGATE LOCAL</span></div><div className="offer-info"><div className="store-name"><Store size={13} /> {offer.shop}</div><h3>{offer.title}</h3><p className="offer-description">{offer.description}</p><div className="offer-meta"><span><MapPin size={13} /> {offer.area}</span><span><Clock3 size={13} /> {offer.time}</span></div><div className="price-row"><div>{offer.oldPrice > offer.price && <del>{money(offer.oldPrice)}</del>}<strong>{money(offer.price)}</strong></div><button className="details-button" onClick={() => setNotice('Consulte o comércio responsável para confirmar disponibilidade e resgate desta oferta.')}>Ver oferta <ChevronRight size={16} /></button></div></div></article>)}</div> : <div className="empty-state"><span>♻️</span><h3>{showFavorites ? 'Você ainda não favoritou nenhuma oferta' : 'Ainda não há ofertas publicadas'}</h3><p>{showFavorites ? 'Toque no coração de uma oferta para salvá-la aqui.' : 'Quando os comércios publicarem ofertas reais, elas aparecerão aqui.'}</p>{showFavorites && <button onClick={() => setShowFavorites(false)}>Ver todas as ofertas</button>}</div>}
         </section>
 
-        <section className="merchant-banner"><div className="merchant-illustration">🏪</div><div><span>VOCÊ TEM UM NEGÓCIO LOCAL?</span><h2>O que sobrou pode virar oportunidade.</h2><p>Encontre novos clientes, reduza perdas e dê uma nova chance aos seus produtos.</p></div><button onClick={() => { setMerchantOpen(true); setMerchantMode(merchantSession ? 'dashboard' : 'signup'); }}>Quero anunciar <ChevronRight size={17} /></button></section>
+        <section className="merchant-banner"><div className="merchant-illustration">🏪</div><div><span>VOCÊ TEM UM NEGÓCIO LOCAL?</span><h2>O que sobrou pode virar oportunidade.</h2><p>Encontre novos clientes, reduza perdas e dê uma nova chance aos seus produtos.</p></div><button onClick={() => { setMerchantOpen(true); setMerchantMode(merchantSession ? 'dashboard' : 'signup'); loadAvailableCoupons(); }}>Quero anunciar <ChevronRight size={17} /></button></section>
       </main>
 
       {merchantOpen && <div className="merchant-modal-backdrop" role="presentation" onClick={event => { if (event.target === event.currentTarget) setMerchantOpen(false); }}>
@@ -216,7 +226,7 @@ export default function App() {
             </form>
             {merchantStore && <div className="merchant-review-note">Situação do cadastro: <strong>{merchantStore.status === 'approved' || merchantStore.status === 'active' ? 'Aprovado' : merchantStore.status === 'rejected' ? 'Precisa de ajustes' : merchantStore.status === 'blocked' ? 'Bloqueado' : 'Pendente de aprovação'}</strong></div>}
             <h3 className="merchant-section-title">Cadastrar uma oferta</h3>
-            {(!merchantStore || !['approved','active'].includes(merchantStore.status)) ? <div className="merchant-locked"><strong>Cadastro de ofertas</strong><p>Você pode publicar suas ofertas diretamente, sem precisar de aprovação administrativa.</p></div> : <form className="merchant-form" onSubmit={submitOffer}>
+            {!merchantStore ? <div className="merchant-locked"><strong>Complete o perfil da loja</strong><p>Salve os dados da loja e o cupom autorizado. Depois você poderá publicar ofertas sem aprovação prévia.</p></div> : <form className="merchant-form" onSubmit={submitOffer}>
               <label>Nome da oferta<input required value={offerForm.title} onChange={e => setOfferForm({ ...offerForm, title: e.target.value })} placeholder="Ex.: Kit de pães" /></label>
               <label>Descrição<textarea value={offerForm.description} onChange={e => setOfferForm({ ...offerForm, description: e.target.value })} placeholder="Descreva o produto" /></label>
               <label>Categoria<select value={offerForm.category} onChange={e => setOfferForm({ ...offerForm, category: e.target.value })}>{['Outros','Padaria','Hortifruti','Refeições','Doces','Cafeteria','Mercado'].map(x => <option key={x}>{x}</option>)}</select></label>
