@@ -94,9 +94,9 @@ export default function App() {
 
   async function saveMerchantProfile(event) {
     event.preventDefault();
-    if (!supabase || !merchantSession || !merchantCoupon) { setNotice('Selecione um cupom disponibilizado pela administração.'); return; }
+    if (!supabase || !merchantSession) { setNotice('Entre na sua conta para salvar o perfil.'); return; }
     setMerchantBusy(true); setNotice('');
-    const values = { owner_id: merchantSession.user.id, name: merchantName.trim(), owner_name: ownerName.trim(), document_number: merchantDocument.replace(/[^0-9]/g, ''), phone: merchantPhone.trim(), address: merchantAddress.trim(), coupon_code: merchantCoupon.toUpperCase().trim(), category: 'Comércio local', city: 'Londrina', status: 'pending' };
+    const values = { owner_id: merchantSession.user.id, name: merchantName.trim(), owner_name: ownerName.trim(), document_number: merchantDocument.replace(/[^0-9]/g, ''), phone: merchantPhone.trim(), address: merchantAddress.trim(), coupon_code: merchantCoupon.trim() ? merchantCoupon.toUpperCase().trim() : null, category: 'Comércio local', city: 'Londrina', status: 'pending' };
     const result = merchantStore?.id
       ? await supabase.from('stores').update(values).eq('id', merchantStore.id).eq('owner_id', merchantSession.user.id).select().single()
       : await supabase.from('stores').insert(values).select().single();
@@ -111,7 +111,7 @@ export default function App() {
     setMerchantBusy(true); setNotice('');
     let result;
     if (merchantMode === 'signup') {
-      result = await supabase.auth.signUp({ email: merchantEmail.trim(), password: merchantPassword, options: { data: { display_name: ownerName.trim(), owner_name: ownerName.trim(), store_name: merchantName.trim(), document_number: merchantDocument.replace(/[^0-9]/g, ''), phone: merchantPhone.trim(), address: merchantAddress.trim(), coupon_code: merchantCoupon.toUpperCase().trim(), role: 'merchant' }, emailRedirectTo: window.location.origin } });
+      result = await supabase.auth.signUp({ email: merchantEmail.trim(), password: merchantPassword, options: { data: { display_name: ownerName.trim(), owner_name: ownerName.trim(), store_name: merchantName.trim(), document_number: merchantDocument.replace(/[^0-9]/g, ''), phone: merchantPhone.trim(), address: merchantAddress.trim(), role: 'merchant' }, emailRedirectTo: window.location.origin } });
     } else {
       result = await supabase.auth.signInWithPassword({ email: merchantEmail.trim(), password: merchantPassword });
     }
@@ -259,7 +259,7 @@ export default function App() {
               <label>CPF ou CNPJ<input required inputMode="numeric" minLength={11} maxLength={18} value={merchantDocument} onChange={e => setMerchantDocument(e.target.value)} placeholder="CPF ou CNPJ" /></label>
               <label>Telefone / WhatsApp<input required type="tel" value={merchantPhone} onChange={e => setMerchantPhone(e.target.value)} placeholder="(43) 99999-9999" /></label>
               <label>Endereço da loja<input required value={merchantAddress} onChange={e => setMerchantAddress(e.target.value)} placeholder="Rua, número e bairro" /></label>
-              <label>Cupom de cadastro<select required value={merchantCoupon} onChange={e => setMerchantCoupon(e.target.value)}><option value="">Selecione um cupom disponível</option>{merchantCoupons.map(c => <option key={c.id} value={c.code}>{c.code}{c.description ? ' — ' + c.description : ''}</option>)}</select></label>
+              
               <button className="merchant-submit" disabled={merchantBusy} type="submit"><Store size={17} /> {merchantBusy ? 'Salvando...' : 'Salvar dados da loja'}</button>
             </form>
             {merchantStore && <div className="merchant-review-note">Situação do cadastro: <strong>{merchantStore.status === 'approved' || merchantStore.status === 'active' ? 'Aprovado' : merchantStore.status === 'rejected' ? 'Precisa de ajustes' : merchantStore.status === 'blocked' ? 'Bloqueado' : 'Pendente de aprovação'}</strong></div>}
@@ -278,9 +278,9 @@ export default function App() {
             <button className="merchant-secondary" onClick={signOutMerchant}><LogOut size={16} /> Sair da conta</button>
           </> : <>
             <p>{merchantMode === 'login' ? 'Entre para gerenciar seu comércio e cadastrar ofertas.' : 'Crie sua conta para começar a enviar ofertas para revisão.'}</p>
-            {merchantMode === 'signup' && merchantCoupons.length === 0 && <div className="merchant-locked"><strong>Nenhum cupom disponível</strong><p>A administração precisa criar e ativar um cupom antes do cadastro de novos lojistas.</p></div>}
+            
             <form className="merchant-form" onSubmit={submitMerchantAuth}>
-              {merchantMode === 'signup' && <><label>Nome completo do responsável<input required value={ownerName} onChange={e => setOwnerName(e.target.value)} placeholder="Nome do dono ou responsável" /></label><label>Nome da loja<input required value={merchantName} onChange={e => setMerchantName(e.target.value)} placeholder="Nome comercial" /></label><label>CPF ou CNPJ<input required inputMode="numeric" minLength={11} maxLength={18} value={merchantDocument} onChange={e => setMerchantDocument(e.target.value)} placeholder="CPF ou CNPJ" /></label><label>Telefone / WhatsApp<input required type="tel" value={merchantPhone} onChange={e => setMerchantPhone(e.target.value)} placeholder="(43) 99999-9999" /></label><label>Endereço da loja<input required value={merchantAddress} onChange={e => setMerchantAddress(e.target.value)} placeholder="Rua, número e bairro" /></label><label>Cupom da administração<select required value={merchantCoupon} onChange={e => setMerchantCoupon(e.target.value)}><option value="">Selecione um cupom disponível</option>{merchantCoupons.map(c => <option key={c.id} value={c.code}>{c.code}{c.description ? ' — ' + c.description : ''}</option>)}</select></label></>}
+              {merchantMode === 'signup' && <><label>Nome completo do responsável<input required value={ownerName} onChange={e => setOwnerName(e.target.value)} placeholder="Nome do dono ou responsável" /></label><label>Nome da loja<input required value={merchantName} onChange={e => setMerchantName(e.target.value)} placeholder="Nome comercial" /></label><label>CPF ou CNPJ<input required inputMode="numeric" minLength={11} maxLength={18} value={merchantDocument} onChange={e => setMerchantDocument(e.target.value)} placeholder="CPF ou CNPJ" /></label><label>Telefone / WhatsApp<input required type="tel" value={merchantPhone} onChange={e => setMerchantPhone(e.target.value)} placeholder="(43) 99999-9999" /></label><label>Endereço da loja<input required value={merchantAddress} onChange={e => setMerchantAddress(e.target.value)} placeholder="Rua, número e bairro" /></label></>}
               <label>E-mail<input required type="email" autoComplete="email" value={merchantEmail} onChange={e => setMerchantEmail(e.target.value)} placeholder="voce@loja.com.br" /></label>
               <label>Senha<input required type="password" minLength={6} autoComplete={merchantMode === 'login' ? 'current-password' : 'new-password'} value={merchantPassword} onChange={e => setMerchantPassword(e.target.value)} placeholder="Mínimo de 6 caracteres" /></label>
               <button className="merchant-submit" disabled={merchantBusy || (merchantMode === 'signup' && merchantCoupons.length === 0)} type="submit"><LogIn size={17} /> {merchantBusy ? 'Aguarde...' : merchantMode === 'login' ? 'Entrar' : 'Criar conta'}</button>
